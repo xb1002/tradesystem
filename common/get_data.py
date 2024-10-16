@@ -12,22 +12,29 @@ from common.get_config import Config
 
 
 class GetData:
-    def __init__(self, tushare_token, database='stock'):
+    def __init__(self, tushare_token):
         # 设置tushare配置
         self.tushare_token = tushare_token
         self.pro = ts.pro_api(tushare_token)
         # 设置mysql配置
         self.config = Config()
         self.mysql_config = {'mysql_host': self.config['mysql_host'], 'mysql_port': self.config['mysql_port'],
-                             'mysql_username': self.config['mysql_username'], 'mysql_password': self.config['mysql_password']}
+                             'mysql_username': self.config['mysql_username'], 'mysql_password': self.config['mysql_password'],
+                             'database': self.config['database']}
         db = pymysql.connect(host=self.mysql_config['mysql_host'], user=self.mysql_config['mysql_username'],
-                                password=self.mysql_config['mysql_password'], database=database)
+                                password=self.mysql_config['mysql_password'], database=self.mysql_config['database'])
         self.cursor = db.cursor()
-        self.engine = create_engine(f'mysql+pymysql://{self.mysql_config["mysql_username"]}:{self.mysql_config["mysql_password"]}@{self.mysql_config["mysql_host"]}:{self.mysql_config["mysql_port"]}/{database}')
+        self.engine = create_engine(f'mysql+pymysql://{self.mysql_config["mysql_username"]}:{self.mysql_config["mysql_password"]}@{self.mysql_config["mysql_host"]}:{self.mysql_config["mysql_port"]}/{self.mysql_config["database"]}')
         # 获取交易日历
-        self.trade_calendar = self.get_trade_calendars('20000101', '20241013')
-        self.trade_calendar.set_index('cal_date', inplace=True)
-
+        self.cursor.execute('show tables like "trade_calendar"')
+        result = self.cursor.fetchall()
+        if not result:
+            self.trade_calendar = self.get_trade_calendars('20000101', '20241013')
+            self.trade_calendar.set_index('cal_date', inplace=True)
+        else:
+            self.trade_calendar = pd.read_sql('select * from trade_calendar', con=self.engine)
+            self.trade_calendar.set_index('cal_date', inplace=True)
+            
     def get_stock_data_by_tushare(self, ts_codes, start_date, end_date, **kwargs):
         # '**kwargs: 用于接收tushare pro获取数据时的可变参数'
         # 以tscode为表名，寻找是否有表名为tscode的表，如果没有则创建表并且获取数据，如果有则下一步
